@@ -1,0 +1,90 @@
+---
+title: "Practical Machine Learning Week 4 - Fitness Prediction"
+author: "Keith Swaback"
+date: "May 22, 2017"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include= FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE)
+```
+**=========================================================================================**
+<br>
+
+#Summary
+<br>
+In this assignment we are asked to take the Weight Lifting Exercise data provided by the 
+Human Activity Recognition program as described below, and to build a model using this data.
+Then we are asked to predict outcomes based on the model for 20 observations in a a test data set.
+
+###Getting and cleaning the required data, creating test and training sets within the training data
+<br>
+Download data from the provided location. Credit should be given to the Human Activity
+Recognition program ("http://groupware.les.inf.puc-rio.br/har").
+
+We will use our training data set to build and verify our model. We will not touch the testing data until we are ready
+to do our predictions and submit the quiz.
+
+The dataset for each participant includes data from 4 sensors: the "Arm", "Belt", "Forearm", and "Dumbbell" sensors. Each of these sensors contains an accelerometer (3 degrees of freedom), a gyroscope (3 degrees of freedom), and a magnetometer (3 degrees of freedom). Therefore these are so-called "9 DOF sensors."
+
+Note that the data includes 160 variables, which includes raw data from all sensors as well as 96 "derived features" that are described in the paper associated with the Weight Lifting Exercise data.
+
+Load the training dataset:
+```{r downloaddata, cache = TRUE}
+library(RCurl)
+trainRaw <- read.csv(url('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'))
+```
+<br>
+
+Now, note that the test data set that we will use to predict outcomes does not include any of the derived features, since these are all "instantaneous" samples. All the dervies features are NA. THerefore, it makes no sense to build our model to use them. Instead, let's subset the training data to include only the columns that are relevant for our model - namely, the raw signal. Remove timestamp data and sequence data. Then remove derived feature columns (which are all NA in the test set anyway).
+
+```{r subsetdata, cache = TRUE}
+library(caret)
+trainSS <- subset(trainRaw, select = -c(X, cvtd_timestamp, raw_timestamp_part_1, raw_timestamp_part_2))
+trainSmall <- trainSS[,c(1:7, 33:45, 56:64, 80:82, 98, 109:120, 136, 147:156)]
+```
+<br>
+
+Choosing the features for our model can be a sophisticated exercise if we're trying to optimize the speed of the algorithm. In this case, let's just pick some features and run a couple qplots showing the feature values separated by classe; this will give us a quick idea of whether these features can be used. A couple examples are below:
+
+```{r exploredata, cache = TRUE}
+qplot(data = trainRaw, x = X, y = total_accel_arm, colour = classe)
+qplot(data = trainRaw, x = X, y = total_accel_dumbbell, colour = classe)
+qplot(data = trainRaw, x = X, y = yaw_belt, colour = classe)
+qplot(data = trainRaw, x = X, y = pitch_forearm, colour = classe)
+```
+
+Instead of trying to select certain features, let's just build an algorithm using random forests, and have the model consider all 55 features (56th feature is what we're trying to predict, "classe.")
+<br>
+In an idea case we would build the model with the nearly 20,000 samples in the trainSS model for maximum accuracy. For purposes of this I have randomly subsetted 2000 rows of the training data to build the model as shown in the code below. Then we fit the model on the
+
+
+```{r trainingSmall, cache = TRUE}
+require(dplyr)
+set.seed(12345)
+trainSmall <- sample_n(trainSmall, 2000)
+model <- train(classe ~ ., method = "rf", data=trainSmall, prox = TRUE)
+model
+```
+<br>
+Considering the output above, we see that the random forest algorithm maximizes accuracy well above 90% using random forest model. Therefore I expect my out of sample accuracy to also exceed 90%.
+<br>
+I use this built algorithm to predict outcomes on test dataset. Results are as shown and were submitted to the course quiz.
+
+
+```{r downloadtestingdata, cache = TRUE}
+test <- read.csv(url('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'))
+predict(model, test)
+```
+<br>
+
+
+
+ote that that the raw data has actually already been timesliced as described in the Weight Lifting Exercise paper. In this case we do not want to use the raw measurements from the various sensors, but rather we want to build our prediction model on the derived features calculated for each timeslice (= each window). Therefore subset the data to include only those raws that include all the dervied features (i.e., those rows that appear at the end of a window). Then, let's perform 5-fold cross-validation to split the trainSS set into 5 groups. This will allow us to evaluate the performance of our model within the training set.
+
+
+
